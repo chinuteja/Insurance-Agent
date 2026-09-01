@@ -35,6 +35,4 @@ class DocumentRepository:
         )
 
 
-    def has_documents(self, claim_id: str) -> bool:
-        documents = self.get_by_claim_id(claim_id)
-        return len(documents) > 0
+    
