@@ -26,3 +26,15 @@ class DocumentRepository:
             .filter(Document.document_id == document_id)
             .first()
         )
+
+    def get_by_claim_id(self, claim_id: str) -> list[Document]:
+        return (
+            self.db.query(Document)
+            .filter(Document.claim_id == claim_id)
+            .all()
+        )
+
+
+    def has_documents(self, claim_id: str) -> bool:
+        documents = self.get_by_claim_id(claim_id)
+        return len(documents) > 0

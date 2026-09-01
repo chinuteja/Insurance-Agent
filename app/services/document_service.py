@@ -10,3 +10,9 @@ class DocumentService:
 
     def get_document(self, document_id: str):
         return self.repository.get_by_id(document_id)
+
+    def has_documents(self, claim_id: str) -> bool:
+        documents = self.repository.get_by_claim_id(claim_id)
+
+        return len(documents) > 0
+    

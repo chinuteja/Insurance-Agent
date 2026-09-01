@@ -27,3 +27,6 @@ class CustomerRepository:
             .filter(Customer.customer_id == customer_id)
             .first()
         )
+
+    def get_customers(self, customer_id: str) -> list[Customer]:
+        return self.db.query(Customer).all()
