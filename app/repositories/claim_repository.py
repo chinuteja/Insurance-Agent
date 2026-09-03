@@ -4,7 +4,6 @@ from app.database.models import Claim
 
 
 class ClaimRepository:
-
     def __init__(self, db: Session):
         self.db = db
 
@@ -13,9 +12,7 @@ class ClaimRepository:
             self.db.add(claim)
             self.db.commit()
             self.db.refresh(claim)
-
             return claim
-
         except Exception:
             self.db.rollback()
             raise
