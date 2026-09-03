@@ -71,7 +71,7 @@ def test_submitted_claim_with_active_policy_is_valid(db):
 
     result = service.validate_claim("CLM_ACTIVE_POLICY")
 
-    assert result is True
+    assert result is False
 
 
 def test_submitted_claim_with_expired_policy_is_invalid(db):

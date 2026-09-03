@@ -1,11 +1,14 @@
-from datetime import date
-
 from app.database.models import Claim, Customer, Document, Policy
-from app.exceptions.business_exceptions import ClaimNotSubmittedException, PolicyNotActiveException
-from app.exceptions.business_exceptions import PolicyNotActiveException
 from app.repositories.claim_repository import ClaimRepository
 from app.repositories.document_repository import DocumentRepository
 from app.services.claim_service import ClaimService
+from app.exceptions.business_exceptions import (
+    ClaimNotFoundException,
+    ClaimNotSubmittedException,
+    PolicyNotFoundException,
+    PolicyNotActiveException,
+)
+from datetime import date
 
 
 def create_test_claim(db, claim_id: str, claim_status: str, policy_status: str):
@@ -120,6 +123,47 @@ def test_claim_with_incident_outside_policy_period_is_invalid(db):
     service = ClaimService(db)
 
     result = service.validate_claim("CLM_OUTSIDE_POLICY")
+
+    assert result is False
+
+def test_claim_with_document_is_valid(db):
+    create_test_claim(
+        db,
+        "CLM_WITH_DOCUMENT",
+        "SUBMITTED",
+        "ACTIVE",
+    )
+
+    document = Document(
+        document_id="DOC_CLAIM_VALIDATION",
+        claim_id="CLM_WITH_DOCUMENT",
+        document_type="POLICE_REPORT",
+        file_name="police_report.pdf",
+        storage_path="/documents/police_report.pdf",
+        verification_status="PENDING",
+    )
+
+    repository = DocumentRepository(db)
+    repository.create(document)
+
+    service = ClaimService(db)
+
+    result = service.validate_claim("CLM_WITH_DOCUMENT")
+
+    assert result is True
+
+
+def test_claim_without_document_is_invalid(db):
+    create_test_claim(
+        db,
+        "CLM_WITHOUT_DOCUMENT",
+        "SUBMITTED",
+        "ACTIVE",
+    )
+
+    service = ClaimService(db)
+
+    result = service.validate_claim("CLM_WITHOUT_DOCUMENT")
 
     assert result is False
 
