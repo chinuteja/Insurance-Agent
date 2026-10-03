@@ -1,15 +1,12 @@
-from sqlalchemy.orm import Session
-from langchain_core.messages import HumanMessage, ToolMessage
 
-from app.graph.llm_agent import create_llm_agent
+from sqlalchemy.orm import Session
+from langchain_core.messages import ToolMessage
+
+from app.graph.llm_agent_state import LLMAgentState
 from app.tools.claim_tools import create_claim_tools
 
 
-def run_llm_tool_loop(
-    db: Session,
-    message: str,
-):
-    agent = create_llm_agent(db)
+def create_llm_tool_node(db: Session):
 
     tools = create_claim_tools(db)
 
@@ -18,20 +15,13 @@ def run_llm_tool_loop(
         for tool in tools
     }
 
-    messages = [
-        HumanMessage(content=message),
-    ]
+    def llm_tool_node(state: LLMAgentState) -> dict:
 
-    while True:
+        last_message = state["messages"][-1]
 
-        response = agent.invoke(messages)
+        tool_messages = []
 
-        messages.append(response)
-
-        if not response.tool_calls:
-            return response.content
-
-        for tool_call in response.tool_calls:
+        for tool_call in last_message.tool_calls:
 
             tool_name = tool_call["name"]
             tool_args = tool_call["args"]
@@ -41,9 +31,15 @@ def run_llm_tool_loop(
 
             result = tool.invoke(tool_args)
 
-            messages.append(
+            tool_messages.append(
                 ToolMessage(
                     content=str(result),
                     tool_call_id=tool_call_id,
                 )
             )
+
+        return {
+            "messages": state["messages"] + tool_messages
+        }
+
+    return llm_tool_node

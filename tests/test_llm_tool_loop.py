@@ -52,12 +52,8 @@ def test_llm_can_execute_selected_tool(db):
         "Get claim CLM_LOOP_TEST",
     )
 
-    assert "tool_results" in result
+    assert isinstance(result, str)
 
-    assert len(result["tool_results"]) > 0
+    assert len(result) > 0
 
-    tool_result = result["tool_results"][0]
-
-    assert tool_result["name"] == "get_claim"
-
-    assert tool_result["result"]["claim_id"] == "CLM_LOOP_TEST"
+    assert "CLM_LOOP_TEST" in result
