@@ -9,3 +9,4 @@ class ClaimAgentState(TypedDict):
     covered: bool | None
     documents_present: bool | None
     decision: str | None
+    decision_reason: str | None
