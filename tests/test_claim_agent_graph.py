@@ -65,5 +65,6 @@ def test_claim_agent_graph(db):
 
     final_message = result["messages"][-1]
 
-    assert len(final_message.tool_calls) == 0
-    assert "CLM_CLAIM_AGENT" in final_message.content
+    assert isinstance(final_message, str)
+    assert "CLM_CLAIM_AGENT" in final_message
+    assert "review" in final_message.lower()
