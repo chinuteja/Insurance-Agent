@@ -70,10 +70,10 @@ def test_get_claim_tool(db):
     })
 
     assert result is not None
-    assert result.claim_id == "CLM_TEST_TOOL"
-    assert result.customer_id == "CUS_TEST_CLAIM_TOOL"
-    assert result.policy_id == "POL_TEST_CLAIM_TOOL"
-    assert result.status == "SUBMITTED"
+    assert result["claim_id"] == "CLM_TEST_TOOL"
+    assert result["customer_id"] == "CUS_TEST_CLAIM_TOOL"
+    assert result["policy_id"] == "POL_TEST_CLAIM_TOOL"
+    assert result["status"] == "SUBMITTED"
 
 def test_validate_claim_tool(db):
     create_test_data(db)
