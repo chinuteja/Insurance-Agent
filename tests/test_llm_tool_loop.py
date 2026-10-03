@@ -2,15 +2,15 @@ from datetime import date
 
 from app.database.models import Claim, Customer, Policy
 from app.repositories.claim_repository import ClaimRepository
-from app.graph.agent_graph import create_agent_graph
+from app.graph.llm_tool_loop import run_llm_tool_loop
 
 
-def test_agent_real_tool_loop(db):
+def test_llm_can_execute_selected_tool(db):
 
     customer = Customer(
-        customer_id="CUS_GRAPH_AGENT",
-        name="Graph Agent Test Customer",
-        email="graph_agent@example.com",
+        customer_id="CUS_LOOP_TEST",
+        name="LLM Loop Customer",
+        email="llm_loop@example.com",
         phone="2222222222",
     )
 
@@ -18,8 +18,8 @@ def test_agent_real_tool_loop(db):
     db.commit()
 
     policy = Policy(
-        policy_id="POL_GRAPH_AGENT",
-        customer_id="CUS_GRAPH_AGENT",
+        policy_id="POL_LOOP_TEST",
+        customer_id="CUS_LOOP_TEST",
         policy_type="COMPREHENSIVE",
         vehicle_number="TS14KL1234",
         start_date=date(2026, 1, 1),
@@ -33,9 +33,9 @@ def test_agent_real_tool_loop(db):
     db.commit()
 
     claim = Claim(
-        claim_id="CLM_GRAPH_AGENT",
-        customer_id="CUS_GRAPH_AGENT",
-        policy_id="POL_GRAPH_AGENT",
+        claim_id="CLM_LOOP_TEST",
+        customer_id="CUS_LOOP_TEST",
+        policy_id="POL_LOOP_TEST",
         incident_date=date(2026, 8, 25),
         claim_date=date(2026, 8, 26),
         claim_type="ACCIDENT",
@@ -47,19 +47,17 @@ def test_agent_real_tool_loop(db):
     repository = ClaimRepository(db)
     repository.create(claim)
 
-    graph = create_agent_graph(db)
+    result = run_llm_tool_loop(
+        db,
+        "Get claim CLM_LOOP_TEST",
+    )
 
-    state = {
-        "message": "Process claim CLM_GRAPH_AGENT",
-        "tool_called": None,
-        "tool_result": None,
-        "response": None,
-    }
+    assert "tool_results" in result
 
-    result = graph.invoke(state)
+    assert len(result["tool_results"]) > 0
 
-    assert result["tool_called"] == "get_claim"
-    assert "CLM_GRAPH_AGENT" in result["tool_result"]
-    assert result["response"] == "I have the claim information."
+    tool_result = result["tool_results"][0]
 
-    
+    assert tool_result["name"] == "get_claim"
+
+    assert tool_result["result"]["claim_id"] == "CLM_LOOP_TEST"

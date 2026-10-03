@@ -1,3 +1,4 @@
+from sqlalchemy.orm import Session
 from langgraph.graph import StateGraph, START, END
 
 from app.graph.agent_state import AgentState
@@ -5,15 +6,17 @@ from app.graph.agent_nodes import (
     mock_agent_node,
     route_after_agent,
 )
-from app.graph.agent_tool_nodes import mock_tool_node
+from app.graph.agent_tool_nodes import create_agent_tool_node
 
 
-def create_agent_graph():
+def create_agent_graph(db: Session):
+
+    tool_node = create_agent_tool_node(db)
 
     builder = StateGraph(AgentState)
 
     builder.add_node("agent", mock_agent_node)
-    builder.add_node("tool", mock_tool_node)
+    builder.add_node("tool", tool_node)
 
     builder.add_edge(START, "agent")
 
