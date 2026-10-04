@@ -57,6 +57,8 @@ def test_claim_agent_graph(db):
             "covered": None,
             "documents_present": None,
             "decision": None,
+            "decision_reason": None,
+            "intent": None,
         }
     )
 

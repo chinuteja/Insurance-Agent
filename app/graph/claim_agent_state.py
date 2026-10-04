@@ -4,6 +4,7 @@ from typing import TypedDict
 class ClaimAgentState(TypedDict):
     claim_id: str
     messages: list
+    intent: str | None
     claim: dict | None
     policy_active: bool | None
     covered: bool | None
