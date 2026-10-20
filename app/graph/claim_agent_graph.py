@@ -1,7 +1,12 @@
+from app.graph.claim_agent_coverage_response import (
+    create_claim_coverage_response_node,
+)
 from sqlalchemy.orm import Session
 from langgraph.graph import StateGraph, START, END
 
+from app.graph.claim_agent_coverage import create_claim_coverage_node
 from app.graph.claim_agent_state import ClaimAgentState
+from app.graph.claim_agent_status import create_claim_status_node
 from app.graph.claim_agent_nodes import create_claim_agent_node
 from app.graph.claim_agent_intent import create_claim_intent_node
 from app.graph.claim_agent_intent_router import route_after_intent
@@ -14,6 +19,9 @@ from app.graph.claim_agent_llm_response import create_claim_llm_response_node
 
 def create_claim_agent_graph(db: Session):
     intent_node = create_claim_intent_node(db)
+    status_node = create_claim_status_node(db)
+    coverage_node = create_claim_coverage_node(db)
+    coverage_response_node = create_claim_coverage_response_node()
     agent_node = create_claim_agent_node(db)
     data_node = create_claim_data_node(db)
     tool_node = create_llm_tool_node(db)
@@ -23,6 +31,8 @@ def create_claim_agent_graph(db: Session):
     builder = StateGraph(ClaimAgentState)
 
     builder.add_node("intent", intent_node)
+    builder.add_node("status", status_node)
+    builder.add_node("coverage", coverage_node)
     builder.add_node("agent", agent_node)
     builder.add_node("tool", tool_node)
     builder.add_node("data", data_node)
@@ -35,7 +45,8 @@ def create_claim_agent_graph(db: Session):
         "intent",
         route_after_intent,
         {
-            "status": "agent",
+            "status": "status",
+            "coverage": "coverage",
             "agent": "agent",
         },
     )
@@ -52,6 +63,12 @@ def create_claim_agent_graph(db: Session):
     builder.add_edge("tool", "agent")
     builder.add_edge("data", "decision")
     builder.add_edge("decision", "llm_response")
+    builder.add_node("coverage_response", coverage_response_node)
     builder.add_edge("llm_response", END)
+
+    builder.add_edge("status", END)
+   
+    builder.add_edge("coverage", "coverage_response")
+    builder.add_edge("coverage_response", END)
 
     return builder.compile()
