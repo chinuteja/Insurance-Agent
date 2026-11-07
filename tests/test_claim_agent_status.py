@@ -2,7 +2,9 @@ from datetime import date
 
 from app.database.models import Customer, Policy, Claim
 from app.graph.claim_agent_graph import create_claim_agent_graph
+import pytest
 
+from app.exceptions.business_exceptions import ClaimNotFoundException
 
 def test_claim_agent_status_flow(db):
     customer = Customer(
@@ -68,3 +70,34 @@ def test_claim_agent_status_flow(db):
     assert result["intent"] == "STATUS"
     assert result["claim"] is not None
     assert result["claim"]["claim_id"] == claim.claim_id
+
+
+def test_claim_agent_status_with_invalid_claim_id(db):
+
+    graph = create_claim_agent_graph(db)
+
+    state = {
+        "claim_id": "CLM_INVALID_999",
+        "messages": [
+            "What is the status of claim CLM_INVALID_999?"
+        ],
+        "intent": None,
+        "claim": None,
+        "policy_active": None,
+        "covered": None,
+        "documents_present": None,
+        "decision": None,
+        "decision_reason": None,
+    }
+
+    result = graph.invoke(state)
+
+    assert result["intent"] == "STATUS"
+    assert result["claim"] is None
+
+    response = result["messages"][-1]
+
+    assert isinstance(response, str)
+    assert "CLM_INVALID_999" in response
+    assert "couldn't find" in response.lower()
+    assert "verify the claim ID" in response
