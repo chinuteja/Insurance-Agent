@@ -30,3 +30,32 @@ def test_coverage_response_does_not_promise_approval():
 
     assert "CLM_RESPONSE" in response
     assert "does not guarantee final claim approval" in response
+
+
+def test_coverage_response_explains_incident_outside_policy_dates():
+    node = create_claim_coverage_response_node()
+
+    state = {
+        "claim_id": "CLM_OUTSIDE",
+        "messages": [
+            "Is my accident covered?"
+        ],
+        "intent": "COVERAGE",
+        "claim": {
+            "claim_id": "CLM_OUTSIDE",
+            "incident_date": "2026-09-01",
+        },
+        "policy_active": True,
+        "covered": False,
+        "documents_present": None,
+        "decision": None,
+        "decision_reason": (
+            "The incident date falls outside the policy coverage period."
+        ),
+    }
+
+    result = node(state)
+    response = result["messages"][-1]
+
+    assert "CLM_OUTSIDE" in response
+    assert "falls outside the policy coverage period" in response

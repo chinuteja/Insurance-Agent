@@ -22,4 +22,4 @@ def test_analysis_intent_routes_to_agent():
 def test_general_intent_routes_to_agent():
     state = {"intent": "GENERAL"}
 
-    assert route_after_intent(state) == "agent"
+    assert route_after_intent(state) == "general"

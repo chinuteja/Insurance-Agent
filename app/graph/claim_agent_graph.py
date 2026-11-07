@@ -1,9 +1,12 @@
 from app.graph.claim_agent_coverage_response import (
     create_claim_coverage_response_node,
 )
+from app.graph.claim_agent_status_response import (
+    create_claim_status_response_node,
+)
 from sqlalchemy.orm import Session
 from langgraph.graph import StateGraph, START, END
-
+from app.graph.claim_agent_general import create_claim_general_node
 from app.graph.claim_agent_coverage import create_claim_coverage_node
 from app.graph.claim_agent_state import ClaimAgentState
 from app.graph.claim_agent_status import create_claim_status_node
@@ -27,6 +30,8 @@ def create_claim_agent_graph(db: Session):
     tool_node = create_llm_tool_node(db)
     decision_node = create_claim_decision_node(db)
     llm_response_node = create_claim_llm_response_node(db)
+    general_node = create_claim_general_node()
+    status_response_node = create_claim_status_response_node()
 
     builder = StateGraph(ClaimAgentState)
 
@@ -38,7 +43,8 @@ def create_claim_agent_graph(db: Session):
     builder.add_node("data", data_node)
     builder.add_node("decision", decision_node)
     builder.add_node("llm_response", llm_response_node)
-
+    builder.add_node("general", general_node)
+    builder.add_node("status_response", status_response_node)
     builder.add_edge(START, "intent")
 
     builder.add_conditional_edges(
@@ -48,6 +54,7 @@ def create_claim_agent_graph(db: Session):
             "status": "status",
             "coverage": "coverage",
             "agent": "agent",
+            "general": "general"
         },
     )
 
@@ -66,9 +73,9 @@ def create_claim_agent_graph(db: Session):
     builder.add_node("coverage_response", coverage_response_node)
     builder.add_edge("llm_response", END)
 
-    builder.add_edge("status", END)
-   
+    builder.add_edge("status", "status_response")
+    builder.add_edge("status_response", END)
     builder.add_edge("coverage", "coverage_response")
     builder.add_edge("coverage_response", END)
-
+    builder.add_edge("general", END)
     return builder.compile()

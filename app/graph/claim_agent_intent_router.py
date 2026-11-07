@@ -10,4 +10,7 @@ def route_after_intent(state: ClaimAgentState) -> str:
     if intent == "COVERAGE":
         return "coverage"
 
+    if intent == "GENERAL":
+        return "general"
+
     return "agent"
