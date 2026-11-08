@@ -7,9 +7,22 @@ from app.llm import create_llm
 
 
 def create_claim_llm_response_node(db: Session):
+
     llm = create_llm()
 
     def claim_llm_response_node(state: ClaimAgentState) -> dict:
+
+        # Handle missing claims without calling the LLM.
+        if state["claim"] is None:
+            message = state.get(
+                "decision_reason",
+                "The requested claim could not be found."
+            )
+
+            return {
+                "messages": state["messages"] + [message]
+            }
+
         analysis = build_claim_analysis(state)
 
         system_prompt = """
@@ -29,7 +42,7 @@ IMPORTANT RULES:
 """
 
         user_prompt = f"""
-Explain the following verified insurance claim analysis to the customer:
+Explain the following verified insurance claim analysis:
 
 {analysis}
 """

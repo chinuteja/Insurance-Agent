@@ -4,18 +4,33 @@ from app.graph.claim_agent_state import ClaimAgentState
 from app.services.claim_service import ClaimService
 from app.services.policy_service import PolicyService
 from app.services.document_service import DocumentService
+from app.exceptions.business_exceptions import ClaimNotFoundException
 
 
 def create_claim_data_node(db: Session):
 
     def claim_data_node(state: ClaimAgentState) -> dict:
+
         claim_id = state["claim_id"]
 
         claim_service = ClaimService(db)
         policy_service = PolicyService(db)
         document_service = DocumentService(db)
 
-        claim = claim_service.get_claim(claim_id)
+        try:
+            claim = claim_service.get_claim(claim_id)
+
+        except ClaimNotFoundException:
+            return {
+                "claim": None,
+                "policy_active": False,
+                "covered": False,
+                "documents_present": False,
+                "decision_reason": (
+                    f"I couldn't find claim {claim_id}. "
+                    "Please verify the claim ID and try again."
+                ),
+            }
 
         policy_active = policy_service.is_policy_active(
             claim.policy_id
@@ -23,7 +38,7 @@ def create_claim_data_node(db: Session):
 
         covered = policy_service.is_incident_covered(
             claim.policy_id,
-            claim.incident_date,
+            claim.incident_date
         )
 
         documents_present = document_service.has_documents(

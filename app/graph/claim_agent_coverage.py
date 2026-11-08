@@ -1,9 +1,11 @@
-
 from sqlalchemy.orm import Session
 
 from app.graph.claim_agent_state import ClaimAgentState
 from app.services.claim_service import ClaimService
 from app.services.policy_service import PolicyService
+from app.exceptions.business_exceptions import (
+    ClaimNotFoundException,
+)
 
 
 def create_claim_coverage_node(db: Session):
@@ -11,7 +13,21 @@ def create_claim_coverage_node(db: Session):
     policy_service = PolicyService(db)
 
     def claim_coverage_node(state: ClaimAgentState) -> dict:
-        claim = claim_service.get_claim(state["claim_id"])
+        claim_id = state["claim_id"]
+
+        try:
+            claim = claim_service.get_claim(claim_id)
+
+        except ClaimNotFoundException:
+            return {
+                "claim": None,
+                "policy_active": False,
+                "covered": False,
+                "decision_reason": (
+                    f"I couldn't find claim {claim_id}. "
+                    "Please verify the claim ID and try again."
+                ),
+            }
 
         policy = policy_service.get_policy(claim.policy_id)
 
