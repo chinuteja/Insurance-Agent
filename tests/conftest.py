@@ -2,7 +2,7 @@ import pytest
 
 from app.database.connection import SessionLocal
 from app.database.models import Customer, Policy, Claim, Document
-
+from tests.test_document_loader import create_sample_pdf
 
 @pytest.fixture
 def db():
@@ -19,3 +19,10 @@ def db():
 
         session.commit()
         session.close()
+@pytest.fixture
+def sample_policy_pdf(tmp_path):
+    file_path = tmp_path / "sample_policy.pdf"
+
+    create_sample_pdf(file_path)
+
+    return str(file_path)
