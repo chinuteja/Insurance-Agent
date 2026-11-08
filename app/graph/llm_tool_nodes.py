@@ -1,11 +1,10 @@
+
 from sqlalchemy.orm import Session
 from langchain_core.messages import ToolMessage
 
 from app.graph.llm_agent_state import LLMAgentState
 from app.tools.claim_tools import create_claim_tools
-from app.exceptions.business_exceptions import (
-    ClaimNotFoundException,
-)
+from app.exceptions.business_exceptions import BusinessException
 
 
 def create_llm_tool_node(db: Session):
@@ -34,11 +33,8 @@ def create_llm_tool_node(db: Session):
             try:
                 result = tool.invoke(tool_args)
 
-            except ClaimNotFoundException:
-                result = (
-                    "ERROR: The requested claim was not found. "
-                    "Please verify the claim ID and try again."
-                )
+            except BusinessException as exc:
+                result = f"Business validation error: {str(exc)}"
 
             tool_messages.append(
                 ToolMessage(

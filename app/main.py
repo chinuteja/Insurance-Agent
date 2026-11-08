@@ -4,7 +4,7 @@ from app.routers.customer_router import router as customer_router
 from app.routers.policy_router import router as policy_router
 from app.routers.claim_router import router as claim_router
 from app.routers.document_router import router as document_router
-
+from app.routers.ai_claim_router import router as ai_claim_router
 
 app = FastAPI(
     title="Insurance AI Agent Platform",
@@ -17,7 +17,7 @@ app.include_router(customer_router)
 app.include_router(policy_router)
 app.include_router(claim_router)
 app.include_router(document_router)
-
+app.include_router(ai_claim_router)
 
 @app.get("/")
 def root():
