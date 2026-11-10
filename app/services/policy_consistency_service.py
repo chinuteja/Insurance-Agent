@@ -40,8 +40,11 @@ class PolicyConsistencyService:
 
         # Step 2: Retrieve relevant policy clauses.
         query = (
-            f"Insurance policy terms relevant to {document_type}: "
-            f"{document_text[:6000]}"
+           f"Insurance policy coverage, exclusions, limitations, "
+    f"and conditions relevant to {document_type}. "
+    f"Find policy clauses that support or contradict the "
+    f"following document information: "
+    f"{document_text[:6000]}"
         )
 
         retrieval_result = self.retrieval_service.retrieve_documents(
