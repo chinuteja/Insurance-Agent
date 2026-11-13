@@ -29,32 +29,47 @@ class PolicyConsistencyService:
     ) -> PolicyConsistencyResponse:
 
         # Step 1: Validate inputs.
-        if not document_type.strip():
+        if not document_type or not document_type.strip():
             raise ValueError("Document type cannot be empty.")
 
-        if not document_text.strip():
+        if not document_text or not document_text.strip():
             raise ValueError("Document text cannot be empty.")
 
         if k <= 0:
             raise ValueError("k must be greater than zero.")
 
-        # Step 2: Retrieve relevant policy clauses.
+        # Step 2: Prepare semantic retrieval query.
         query = (
-           f"Insurance policy coverage, exclusions, limitations, "
-    f"and conditions relevant to {document_type}. "
-    f"Find policy clauses that support or contradict the "
-    f"following document information: "
-    f"{document_text[:6000]}"
+            f"Insurance policy coverage, exclusions, limitations, "
+            f"and conditions relevant to {document_type}. "
+            f"Find policy clauses that support or contradict the "
+            f"following document information: "
+            f"{document_text[:6000]}"
         )
 
-        retrieval_result = self.retrieval_service.retrieve_documents(
-            query=query,
-            k=k,
+        # Step 3: Define policy-specific keywords.
+        keywords = [
+            "wear and tear",
+            "gradual deterioration",
+            "exclusion",
+            "accidental damage",
+            "collision",
+            "flood damage",
+            "natural disaster protection",
+        ]
+
+        # Step 4: Perform combined retrieval.
+        retrieval_result = (
+            self.retrieval_service.retrieve_policy_evidence(
+                query=query,
+                keywords=keywords,
+                k=k,
+            )
         )
 
         retrieved_documents = retrieval_result["results"]
 
-        # Step 3: Handle insufficient policy evidence.
+        # Step 5: Handle insufficient policy evidence.
         if not retrieved_documents:
             return PolicyConsistencyResponse(
                 document_type=document_type,
@@ -68,7 +83,7 @@ class PolicyConsistencyService:
                 ),
             )
 
-        # Step 4: Convert retrieved clauses into evidence objects.
+        # Step 6: Convert retrieved clauses into evidence objects.
         evidence = []
 
         for document in retrieved_documents:
@@ -80,10 +95,11 @@ class PolicyConsistencyService:
                     content=document["content"],
                     source=metadata.get("source"),
                     page=metadata.get("page"),
+                    relevance_score=document.get("score"),
                 )
             )
 
-        # Step 5: Prepare policy evidence for the LLM.
+        # Step 7: Prepare policy evidence for the LLM.
         policy_context = "\n\n".join(
             [
                 (
@@ -96,7 +112,7 @@ class PolicyConsistencyService:
             ]
         )
 
-        # Step 6: Ask the LLM to compare document and policy.
+        # Step 8: Ask the LLM to compare document and policy.
         messages = [
             SystemMessage(
                 content="""
@@ -109,7 +125,8 @@ Rules:
 1. Use only the supplied document and policy evidence.
 2. Never invent policy clauses or document details.
 3. Mark INCONSISTENT only when the evidence directly
-   contradicts the submitted information.
+   contradicts the submitted information or establishes
+   that the described damage falls under an explicit exclusion.
 4. Mark CONSISTENT only when the available evidence
    supports the submitted information.
 5. If the evidence is ambiguous, use NEEDS_REVIEW.
@@ -121,6 +138,9 @@ Rules:
 9. Do not approve or reject insurance claims.
 10. Provide a concise explanation and cite the supplied
     policy evidence in the findings.
+11. Distinguish policy exclusions from coverage provisions.
+12. Do not infer that a policy covers something merely
+    because no exclusion was retrieved.
 """
             ),
             HumanMessage(
@@ -140,10 +160,10 @@ return a structured policy consistency response.
             ),
         ]
 
-        # Step 7: Generate structured verification result.
+        # Step 9: Generate structured verification result.
         response = self.llm.invoke(messages)
 
-        # Step 8: Ensure the requested document type is returned.
+        # Step 10: Ensure the requested document type is returned.
         response.document_type = document_type
 
         return response

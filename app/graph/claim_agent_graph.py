@@ -1,11 +1,13 @@
+
+from sqlalchemy.orm import Session
+from langgraph.graph import StateGraph, START, END
+
 from app.graph.claim_agent_coverage_response import (
     create_claim_coverage_response_node,
 )
 from app.graph.claim_agent_status_response import (
     create_claim_status_response_node,
 )
-from sqlalchemy.orm import Session
-from langgraph.graph import StateGraph, START, END
 from app.graph.claim_agent_general import create_claim_general_node
 from app.graph.claim_agent_coverage import create_claim_coverage_node
 from app.graph.claim_agent_state import ClaimAgentState
@@ -18,9 +20,26 @@ from app.graph.llm_tool_nodes import create_llm_tool_node
 from app.graph.llm_agent_router import route_after_llm
 from app.graph.claim_agent_decision import create_claim_decision_node
 from app.graph.claim_agent_llm_response import create_claim_llm_response_node
+from app.graph.document_verification_node import (
+    create_document_verification_node,
+)
+
+
+def route_after_claim_data(state: ClaimAgentState) -> str:
+    """
+    Skip document verification when the claim does not exist.
+    Otherwise, continue to document verification.
+    """
+
+    if state.get("claim") is None:
+        return "decision"
+
+    return "document_verification"
 
 
 def create_claim_agent_graph(db: Session):
+
+    # Create existing nodes
     intent_node = create_claim_intent_node(db)
     status_node = create_claim_status_node(db)
     coverage_node = create_claim_coverage_node(db)
@@ -33,20 +52,35 @@ def create_claim_agent_graph(db: Session):
     general_node = create_claim_general_node()
     status_response_node = create_claim_status_response_node()
 
+    # Create document verification node
+    document_verification_node = (
+        create_document_verification_node(db)
+    )
+
+    # Initialize graph
     builder = StateGraph(ClaimAgentState)
 
+    # Register nodes
     builder.add_node("intent", intent_node)
     builder.add_node("status", status_node)
     builder.add_node("coverage", coverage_node)
     builder.add_node("agent", agent_node)
     builder.add_node("tool", tool_node)
     builder.add_node("data", data_node)
+    builder.add_node(
+        "document_verification",
+        document_verification_node,
+    )
     builder.add_node("decision", decision_node)
     builder.add_node("llm_response", llm_response_node)
     builder.add_node("general", general_node)
     builder.add_node("status_response", status_response_node)
+    builder.add_node("coverage_response", coverage_response_node)
+
+    # Entry point
     builder.add_edge(START, "intent")
 
+    # Intent routing
     builder.add_conditional_edges(
         "intent",
         route_after_intent,
@@ -54,10 +88,11 @@ def create_claim_agent_graph(db: Session):
             "status": "status",
             "coverage": "coverage",
             "agent": "agent",
-            "general": "general"
+            "general": "general",
         },
     )
 
+    # LLM agent routing
     builder.add_conditional_edges(
         "agent",
         route_after_llm,
@@ -67,15 +102,38 @@ def create_claim_agent_graph(db: Session):
         },
     )
 
+    # Tool execution loop
     builder.add_edge("tool", "agent")
-    builder.add_edge("data", "decision")
+
+    # Claim data -> document verification or decision
+    builder.add_conditional_edges(
+        "data",
+        route_after_claim_data,
+        {
+            "document_verification": "document_verification",
+            "decision": "decision",
+        },
+    )
+
+    # Document verification -> decision
+    builder.add_edge(
+        "document_verification",
+        "decision",
+    )
+
+    # Decision -> final LLM response
     builder.add_edge("decision", "llm_response")
-    builder.add_node("coverage_response", coverage_response_node)
     builder.add_edge("llm_response", END)
 
+    # Status flow
     builder.add_edge("status", "status_response")
     builder.add_edge("status_response", END)
+
+    # Coverage flow
     builder.add_edge("coverage", "coverage_response")
     builder.add_edge("coverage_response", END)
+
+    # General insurance questions
     builder.add_edge("general", END)
+
     return builder.compile()

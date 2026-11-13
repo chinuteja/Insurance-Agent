@@ -121,7 +121,11 @@ def test_analysis_intent_integration(db):
     assert result["policy_active"] is True
     assert result["covered"] is True
     assert result["documents_present"] is True
-    assert result["decision"] == "ELIGIBLE_FOR_REVIEW"
+
+    assert result["document_verification_status"] == "INCOMPLETE"
+    assert result["decision"] == "NEEDS_REVIEW"
+
+    assert len(result["missing_documents"]) == 6
     assert len(result["messages"]) > 1
 
 

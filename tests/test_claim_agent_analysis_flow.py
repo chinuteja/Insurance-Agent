@@ -79,5 +79,10 @@ def test_claim_agent_analysis_flow(db):
     assert result["policy_active"] is True
     assert result["covered"] is True
     assert result["documents_present"] is True
-    assert result["decision"] == "ELIGIBLE_FOR_REVIEW"
+
+    # Document verification must prevent premature eligibility.
+    assert result["document_verification_status"] == "INCOMPLETE"
+    assert result["decision"] == "NEEDS_REVIEW"
+
+    assert len(result["missing_documents"]) == 5
     assert len(result["messages"]) > 1
