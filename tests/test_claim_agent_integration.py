@@ -1,7 +1,7 @@
 from datetime import date
 
+from app.database.models import Claim, Customer, Document, Policy
 from app.graph.claim_agent_graph import create_claim_agent_graph
-from app.database.models import Customer, Policy, Claim, Document
 
 
 def setup_claim_data(db, claim_id):
