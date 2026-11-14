@@ -1,8 +1,30 @@
+
 from datetime import date
 
 from app.database.models import Customer, Policy, Claim, Document
 from app.repositories.claim_repository import ClaimRepository
 from app.graph.claim_agent_decision import create_claim_decision_node
+
+
+def create_decision_state(
+    fraud_risk_score=10,
+    fraud_risk_level="LOW",
+    fraud_recommendation="Normal processing.",
+):
+    return {
+        "claim_id": "CLM_DECISION",
+        "messages": [],
+        "claim": None,
+        "policy_active": None,
+        "covered": None,
+        "documents_present": None,
+        "decision": None,
+        "decision_reason": None,
+        "fraud_risk_score": fraud_risk_score,
+        "fraud_risk_level": fraud_risk_level,
+        "fraud_findings": [],
+        "fraud_recommendation": fraud_recommendation,
+    }
 
 
 def test_claim_decision_eligible(db):
@@ -57,23 +79,53 @@ def test_claim_decision_eligible(db):
 
     decision_node = create_claim_decision_node(db)
 
-    result = decision_node(
-    {
-        "claim_id": "CLM_DECISION",
-        "messages": [],
-        "claim": None,
-        "policy_active": None,
-        "covered": None,
-        "documents_present": None,
-        "decision": None,
-        "decision_reason": None,
-
-        # Fraud detection fields
-        "fraud_risk_score": 10,
-        "fraud_risk_level": "LOW",
-        "fraud_findings": [],
-        "fraud_recommendation": "Normal processing.",
-    }
-)
+    result = decision_node(create_decision_state())
 
     assert result["decision"] == "ELIGIBLE_FOR_REVIEW"
+
+
+def test_medium_fraud_risk_requires_review(db):
+    decision_node = create_claim_decision_node(db)
+
+    state = create_decision_state(
+        fraud_risk_score=45,
+        fraud_risk_level="MEDIUM",
+        fraud_recommendation="Additional investigation required.",
+    )
+
+    result = decision_node(state)
+
+    assert result["decision"] == "NEEDS_REVIEW"
+    assert "Medium fraud risk" in result["decision_reason"]
+    assert "45/100" in result["decision_reason"]
+
+
+def test_high_fraud_risk_requires_human_investigation(db):
+    decision_node = create_claim_decision_node(db)
+
+    state = create_decision_state(
+        fraud_risk_score=85,
+        fraud_risk_level="HIGH",
+        fraud_recommendation="Escalate for investigation.",
+    )
+
+    result = decision_node(state)
+
+    assert result["decision"] == "NEEDS_REVIEW"
+    assert "High fraud risk" in result["decision_reason"]
+    assert "human investigation" in result["decision_reason"]
+
+
+def test_missing_fraud_assessment_requires_review(db):
+    decision_node = create_claim_decision_node(db)
+
+    state = create_decision_state(
+        fraud_risk_score=None,
+        fraud_risk_level=None,
+        fraud_recommendation="",
+    )
+
+    result = decision_node(state)
+
+    assert result["decision"] == "NEEDS_REVIEW"
+    assert "could not be completed" in result["decision_reason"]

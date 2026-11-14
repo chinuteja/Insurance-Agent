@@ -56,6 +56,10 @@ def test_claim_decision_inactive_policy(db):
             "documents_present": None,
             "decision": None,
             "decision_reason": None,
+            "fraud_risk_score": 10,
+"fraud_risk_level": "LOW",
+"fraud_findings": [],
+"fraud_recommendation": "Normal processing.",
         }
     )
 
