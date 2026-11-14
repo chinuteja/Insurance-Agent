@@ -20,8 +20,13 @@ from app.graph.llm_tool_nodes import create_llm_tool_node
 from app.graph.llm_agent_router import route_after_llm
 from app.graph.claim_agent_decision import create_claim_decision_node
 from app.graph.claim_agent_llm_response import create_claim_llm_response_node
+
 from app.graph.document_verification_node import (
     create_document_verification_node,
+)
+
+from app.graph.fraud_detection_node import (
+    create_fraud_detection_node,
 )
 
 
@@ -57,6 +62,9 @@ def create_claim_agent_graph(db: Session):
         create_document_verification_node(db)
     )
 
+    # Create fraud detection node
+    fraud_detection_node = create_fraud_detection_node(db)
+
     # Initialize graph
     builder = StateGraph(ClaimAgentState)
 
@@ -67,10 +75,17 @@ def create_claim_agent_graph(db: Session):
     builder.add_node("agent", agent_node)
     builder.add_node("tool", tool_node)
     builder.add_node("data", data_node)
+
     builder.add_node(
         "document_verification",
         document_verification_node,
     )
+
+    builder.add_node(
+        "fraud_detection",
+        fraud_detection_node,
+    )
+
     builder.add_node("decision", decision_node)
     builder.add_node("llm_response", llm_response_node)
     builder.add_node("general", general_node)
@@ -115,9 +130,15 @@ def create_claim_agent_graph(db: Session):
         },
     )
 
-    # Document verification -> decision
+    # Document verification -> fraud detection
     builder.add_edge(
         "document_verification",
+        "fraud_detection",
+    )
+
+    # Fraud detection -> claim decision
+    builder.add_edge(
+        "fraud_detection",
         "decision",
     )
 

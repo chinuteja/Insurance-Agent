@@ -19,9 +19,15 @@ class ClaimAgentState(TypedDict):
     decision: str | None
     decision_reason: str | None
 
-    # New document verification fields
+    # Document verification fields
     document_verification_status: str | None
     document_verification_results: list[dict] | None
     missing_documents: list[str] | None
     document_inconsistencies: list[str] | None
     document_recommendation: str | None
+
+    # Fraud detection fields
+    fraud_risk_score: int | None
+    fraud_risk_level: str | None
+    fraud_findings: list[dict] | None
+    fraud_recommendation: str | None

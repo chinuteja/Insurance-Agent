@@ -29,7 +29,7 @@ def create_claim_decision_node(db: Session):
                 "decision_reason": reason,
             }
 
-        # Check document verification before claim validation.
+        # Check document verification first.
         document_status = state.get(
             "document_verification_status"
         )
@@ -47,7 +47,7 @@ def create_claim_decision_node(db: Session):
                 "decision": "NEEDS_REVIEW",
                 "decision_reason": (
                     "Document verification is incomplete. "
-                    f"Missing required documents: "
+                    "Missing required documents: "
                     f"{', '.join(missing_documents)}."
                 ),
             }
@@ -70,24 +70,83 @@ def create_claim_decision_node(db: Session):
                 ),
             }
 
+        # Fraud risk assessment.
+        fraud_score = state.get("fraud_risk_score")
+        fraud_level = state.get("fraud_risk_level")
+
+        fraud_recommendation = (
+            state.get("fraud_recommendation") or ""
+        )
+
+        # Do not proceed if fraud assessment is unavailable.
+        if fraud_score is None or fraud_level is None:
+            return {
+                "decision": "NEEDS_REVIEW",
+                "decision_reason": (
+                    "Fraud risk assessment could not be completed. "
+                    "Manual investigation is required."
+                ),
+            }
+
+        if not isinstance(fraud_score, int) or not 0 <= fraud_score <= 100:
+            return {
+                "decision": "NEEDS_REVIEW",
+                "decision_reason": (
+                    "Fraud risk assessment returned an invalid score. "
+                    "Manual investigation is required."
+                ),
+            }
+
+        # HIGH risk: escalate for human investigation.
+        if fraud_level == "HIGH":
+            return {
+                "decision": "NEEDS_REVIEW",
+                "decision_reason": (
+                    f"High fraud risk detected (score: {fraud_score}/100). "
+                    "Escalate this claim for human investigation. "
+                    f"{fraud_recommendation}"
+                ),
+            }
+
+        # MEDIUM risk: additional investigation required.
+        if fraud_level == "MEDIUM":
+            return {
+                "decision": "NEEDS_REVIEW",
+                "decision_reason": (
+                    f"Medium fraud risk detected (score: {fraud_score}/100). "
+                    "Additional investigation is required. "
+                    f"{fraud_recommendation}"
+                ),
+            }
+
+        # Only LOW risk proceeds to existing claim validation.
+        if fraud_level != "LOW":
+            return {
+                "decision": "NEEDS_REVIEW",
+                "decision_reason": (
+                    f"Unrecognized fraud risk level: {fraud_level}. "
+                    "Manual investigation is required."
+                ),
+            }
+
+        # Existing claim validation.
         try:
             is_valid = service.validate_claim(claim_id)
 
             if is_valid:
                 decision = "ELIGIBLE_FOR_REVIEW"
                 reason = (
-                    "Claim validation passed. "
-    "Policy is active, incident is covered, "
-    "and applicable document requirements passed "
-    "the current verification checks."
+                    "Claim validation passed. Policy is active, "
+                    "incident is covered, and applicable document "
+                    "requirements passed the current verification checks. "
+                    f"Fraud risk is LOW ({fraud_score}/100)."
                 )
             else:
                 decision = "NEEDS_REVIEW"
                 reason = (
-                    "Claim validation passed. "
-    "Policy is active, incident is covered, "
-    "and applicable document requirements passed "
-    "the current verification checks."
+                    "Claim validation did not pass. "
+                    "Further review of policy and coverage conditions "
+                    "is required."
                 )
 
         except ClaimNotFoundException as exc:

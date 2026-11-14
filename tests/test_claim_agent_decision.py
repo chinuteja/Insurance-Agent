@@ -58,16 +58,22 @@ def test_claim_decision_eligible(db):
     decision_node = create_claim_decision_node(db)
 
     result = decision_node(
-        {
-            "claim_id": "CLM_DECISION",
-            "messages": [],
-            "claim": None,
-            "policy_active": None,
-            "covered": None,
-            "documents_present": None,
-            "decision": None,
-            "decision_reason": None,
-        }
-    )
+    {
+        "claim_id": "CLM_DECISION",
+        "messages": [],
+        "claim": None,
+        "policy_active": None,
+        "covered": None,
+        "documents_present": None,
+        "decision": None,
+        "decision_reason": None,
+
+        # Fraud detection fields
+        "fraud_risk_score": 10,
+        "fraud_risk_level": "LOW",
+        "fraud_findings": [],
+        "fraud_recommendation": "Normal processing.",
+    }
+)
 
     assert result["decision"] == "ELIGIBLE_FOR_REVIEW"
