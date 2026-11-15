@@ -24,12 +24,9 @@ from app.graph.claim_agent_llm_response import create_claim_llm_response_node
 from app.graph.document_verification_node import (
     create_document_verification_node,
 )
-
 from app.graph.fraud_detection_node import (
     create_fraud_detection_node,
 )
-
-# Supervisor
 from app.graph.claim_supervisor import (
     create_claim_supervisor_node,
 )
@@ -37,14 +34,34 @@ from app.graph.claim_supervisor import (
 
 def route_after_claim_data(state: ClaimAgentState) -> str:
     """
-    Skip document verification when the claim does not exist.
-    Otherwise, continue to document verification.
+    Missing claim -> decision.
+    Existing claim -> supervisor.
     """
-
     if state.get("claim") is None:
         return "decision"
 
-    return "document_verification"
+    return "supervisor"
+
+
+def route_next_supervisor_step(state: ClaimAgentState) -> str:
+    """
+    Select the next uncompleted agent from the supervisor plan.
+    """
+
+    supervisor_plan = state.get("supervisor_plan") or []
+    completed_agents = state.get("completed_agents") or []
+
+    for agent_name in supervisor_plan:
+        if agent_name not in completed_agents:
+            if agent_name in {
+                "document_verification",
+                "fraud_detection",
+                "decision",
+            }:
+                return agent_name
+
+    # Fail-safe fallback
+    return "decision"
 
 
 def create_claim_agent_graph(db: Session):
@@ -62,21 +79,17 @@ def create_claim_agent_graph(db: Session):
     general_node = create_claim_general_node()
     status_response_node = create_claim_status_response_node()
 
-    # Create document verification node
+    # Create analysis nodes
     document_verification_node = (
         create_document_verification_node(db)
     )
-
-    # Create fraud detection node
     fraud_detection_node = create_fraud_detection_node(db)
-
-    # Create supervisor node
     supervisor_node = create_claim_supervisor_node()
 
     # Initialize graph
     builder = StateGraph(ClaimAgentState)
 
-    # Register existing nodes
+    # Register nodes
     builder.add_node("intent", intent_node)
     builder.add_node("status", status_node)
     builder.add_node("coverage", coverage_node)
@@ -88,7 +101,6 @@ def create_claim_agent_graph(db: Session):
         "document_verification",
         document_verification_node,
     )
-
     builder.add_node(
         "fraud_detection",
         fraud_detection_node,
@@ -99,8 +111,6 @@ def create_claim_agent_graph(db: Session):
     builder.add_node("general", general_node)
     builder.add_node("status_response", status_response_node)
     builder.add_node("coverage_response", coverage_response_node)
-
-    # Register supervisor
     builder.add_node("supervisor", supervisor_node)
 
     # Entry point
@@ -124,39 +134,57 @@ def create_claim_agent_graph(db: Session):
         route_after_llm,
         {
             "tool": "tool",
-            "end": "supervisor",
+            "end": "data",
         },
     )
 
     # Tool execution loop
     builder.add_edge("tool", "agent")
 
-    # Supervisor -> Claim data
-    builder.add_edge("supervisor", "data")
-
-    # Claim data -> Document verification or decision
+    # Claim data routing
     builder.add_conditional_edges(
         "data",
         route_after_claim_data,
         {
-            "document_verification": "document_verification",
+            "supervisor": "supervisor",
             "decision": "decision",
         },
     )
 
-    # Document verification -> Fraud detection
-    builder.add_edge(
+    # Supervisor dynamically selects the next agent
+    builder.add_conditional_edges(
+        "supervisor",
+        route_next_supervisor_step,
+        {
+            "document_verification": "document_verification",
+            "fraud_detection": "fraud_detection",
+            "decision": "decision",
+        },
+    )
+
+    # Document verification dynamically selects the next step
+    builder.add_conditional_edges(
         "document_verification",
-        "fraud_detection",
+        route_next_supervisor_step,
+        {
+            "document_verification": "document_verification",
+            "fraud_detection": "fraud_detection",
+            "decision": "decision",
+        },
     )
 
-    # Fraud detection -> Claim decision
-    builder.add_edge(
+    # Fraud detection dynamically selects the next step
+    builder.add_conditional_edges(
         "fraud_detection",
-        "decision",
+        route_next_supervisor_step,
+        {
+            "document_verification": "document_verification",
+            "fraud_detection": "fraud_detection",
+            "decision": "decision",
+        },
     )
 
-    # Decision -> Final LLM response
+    # Decision -> Final response
     builder.add_edge("decision", "llm_response")
     builder.add_edge("llm_response", END)
 

@@ -2,7 +2,10 @@
 from sqlalchemy.orm import Session
 
 from app.graph.claim_agent_state import ClaimAgentState
-from app.graph.agent_state_manager import record_agent_result
+from app.graph.agent_state_manager import (
+    record_agent_result,
+    record_agent_error,
+)
 
 from app.services.document_verification_service import (
     DocumentVerificationService,
@@ -56,34 +59,62 @@ def create_document_verification_node(db: Session):
 
         claim_id = state["claim_id"]
 
-        result = (
-            document_verification_service.verify_claim_documents(
-                claim_id=claim_id,
+        try:
+            # Execute document verification
+            result = (
+                document_verification_service.verify_claim_documents(
+                    claim_id=claim_id,
+                )
             )
-        )
 
-        node_result = {
-            "document_verification_status": (
-                result.overall_status.value
-            ),
-            "document_verification_results": [
-                document.model_dump(mode="json")
-                for document in result.documents
-            ],
-            "missing_documents": result.missing_documents,
-            "document_inconsistencies": result.inconsistencies,
-            "document_recommendation": result.recommendation,
-        }
+            node_result = {
+                "document_verification_status": (
+                    result.overall_status.value
+                ),
+                "document_verification_results": [
+                    document.model_dump(mode="json")
+                    for document in result.documents
+                ],
+                "missing_documents": result.missing_documents,
+                "document_inconsistencies": result.inconsistencies,
+                "document_recommendation": result.recommendation,
+            }
 
-        tracking = record_agent_result(
-            state,
-            "document_verification",
-            node_result,
-        )
+            # Record successful execution
+            tracking = record_agent_result(
+                state,
+                "document_verification",
+                node_result,
+            )
 
-        return {
-            **node_result,
-            **tracking,
-        }
+            return {
+                **node_result,
+                **tracking,
+            }
+
+        except Exception as exc:
+            # Record failure without marking the agent completed
+            error_message = (
+                f"Document verification failed: {str(exc)}"
+            )
+
+            tracking = record_agent_error(
+                state,
+                "document_verification",
+                error_message,
+            )
+
+            # Return a safe result requiring manual review
+            return {
+                "document_verification_status": "NEEDS_REVIEW",
+                "document_verification_results": [],
+                "missing_documents": [],
+                "document_inconsistencies": [],
+                "document_recommendation": (
+                    "Automated document verification failed. "
+                    "Manual document review is required."
+                ),
+                **tracking,
+            }
 
     return document_verification_node

@@ -15,10 +15,17 @@ def record_agent_result(
     agent_name: str,
     result: dict,
 ) -> dict:
-    """Store an agent's result and mark it as completed."""
+    """
+    Store a successful agent result and mark it completed.
+    """
 
-    agent_results = dict(state.get("agent_results") or {})
-    completed_agents = list(state.get("completed_agents") or [])
+    agent_results = dict(
+        state.get("agent_results") or {}
+    )
+
+    completed_agents = list(
+        state.get("completed_agents") or []
+    )
 
     agent_results[agent_name] = result
 
@@ -37,9 +44,16 @@ def record_agent_error(
     agent_name: str,
     error: str,
 ) -> dict:
-    """Record an agent execution error."""
+    """
+    Record an agent failure.
 
-    agent_errors = list(state.get("agent_errors") or [])
+    Failed agents are not added to completed_agents.
+    Human review is mandatory after an execution failure.
+    """
+
+    agent_errors = list(
+        state.get("agent_errors") or []
+    )
 
     agent_errors.append({
         "agent": agent_name,
@@ -48,5 +62,6 @@ def record_agent_error(
 
     return {
         "agent_errors": agent_errors,
-        "current_agent": agent_name,
+        "current_agent": None,
+        "requires_human_review": True,
     }
