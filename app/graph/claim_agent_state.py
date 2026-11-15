@@ -31,3 +31,11 @@ class ClaimAgentState(TypedDict):
     fraud_risk_level: str | None
     fraud_findings: list[dict] | None
     fraud_recommendation: str | None
+
+    # Multi-agent supervisor coordination
+    supervisor_plan: list[str] | None
+    completed_agents: list[str] | None
+    agent_results: dict | None
+    current_agent: str | None
+    requires_human_review: bool | None
+    agent_errors: list[dict] | None

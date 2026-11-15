@@ -2,6 +2,8 @@
 from sqlalchemy.orm import Session
 
 from app.graph.claim_agent_state import ClaimAgentState
+from app.graph.agent_state_manager import record_agent_result
+
 from app.services.document_verification_service import (
     DocumentVerificationService,
 )
@@ -60,7 +62,7 @@ def create_document_verification_node(db: Session):
             )
         )
 
-        return {
+        node_result = {
             "document_verification_status": (
                 result.overall_status.value
             ),
@@ -71,6 +73,17 @@ def create_document_verification_node(db: Session):
             "missing_documents": result.missing_documents,
             "document_inconsistencies": result.inconsistencies,
             "document_recommendation": result.recommendation,
+        }
+
+        tracking = record_agent_result(
+            state,
+            "document_verification",
+            node_result,
+        )
+
+        return {
+            **node_result,
+            **tracking,
         }
 
     return document_verification_node

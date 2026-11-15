@@ -29,6 +29,11 @@ from app.graph.fraud_detection_node import (
     create_fraud_detection_node,
 )
 
+# Supervisor
+from app.graph.claim_supervisor import (
+    create_claim_supervisor_node,
+)
+
 
 def route_after_claim_data(state: ClaimAgentState) -> str:
     """
@@ -65,10 +70,13 @@ def create_claim_agent_graph(db: Session):
     # Create fraud detection node
     fraud_detection_node = create_fraud_detection_node(db)
 
+    # Create supervisor node
+    supervisor_node = create_claim_supervisor_node()
+
     # Initialize graph
     builder = StateGraph(ClaimAgentState)
 
-    # Register nodes
+    # Register existing nodes
     builder.add_node("intent", intent_node)
     builder.add_node("status", status_node)
     builder.add_node("coverage", coverage_node)
@@ -92,6 +100,9 @@ def create_claim_agent_graph(db: Session):
     builder.add_node("status_response", status_response_node)
     builder.add_node("coverage_response", coverage_response_node)
 
+    # Register supervisor
+    builder.add_node("supervisor", supervisor_node)
+
     # Entry point
     builder.add_edge(START, "intent")
 
@@ -113,14 +124,17 @@ def create_claim_agent_graph(db: Session):
         route_after_llm,
         {
             "tool": "tool",
-            "end": "data",
+            "end": "supervisor",
         },
     )
 
     # Tool execution loop
     builder.add_edge("tool", "agent")
 
-    # Claim data -> document verification or decision
+    # Supervisor -> Claim data
+    builder.add_edge("supervisor", "data")
+
+    # Claim data -> Document verification or decision
     builder.add_conditional_edges(
         "data",
         route_after_claim_data,
@@ -130,19 +144,19 @@ def create_claim_agent_graph(db: Session):
         },
     )
 
-    # Document verification -> fraud detection
+    # Document verification -> Fraud detection
     builder.add_edge(
         "document_verification",
         "fraud_detection",
     )
 
-    # Fraud detection -> claim decision
+    # Fraud detection -> Claim decision
     builder.add_edge(
         "fraud_detection",
         "decision",
     )
 
-    # Decision -> final LLM response
+    # Decision -> Final LLM response
     builder.add_edge("decision", "llm_response")
     builder.add_edge("llm_response", END)
 

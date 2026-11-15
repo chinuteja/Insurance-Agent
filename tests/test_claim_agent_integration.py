@@ -140,3 +140,170 @@ def test_general_intent_integration(db):
     assert len(result["messages"]) > 1
     assert isinstance(result["messages"][-1], str)
     assert len(result["messages"][-1]) > 0
+
+def test_high_fraud_risk_integration(db, monkeypatch):
+    import app.graph.claim_agent_graph as graph_module
+
+    setup_claim_data(db, "CLM_INT_HIGH_FRAUD")
+
+    # Mock document verification to return a verified result
+    def mock_document_verification(db):
+        def node(state):
+            return {
+                "document_verification_status": "VERIFIED",
+                "document_verification_results": [],
+                "missing_documents": [],
+                "document_inconsistencies": [],
+                "document_recommendation": "Documents verified.",
+            }
+        return node
+
+    # Mock fraud detection to return HIGH risk
+    def mock_fraud_detection(db):
+        def node(state):
+            return {
+                "fraud_risk_score": 85,
+                "fraud_risk_level": "HIGH",
+                "fraud_findings": [
+                    {
+                        "rule_id": "DUPLICATE_CLAIM",
+                        "description": "Potential duplicate claim detected.",
+                        "risk_points": 40,
+                        "source": "RULE_BASED",
+                        "evidence": ["A matching claim was found."],
+                    }
+                ],
+                "fraud_recommendation": (
+                    "Escalate for human investigation."
+                ),
+            }
+        return node
+
+    monkeypatch.setattr(
+        graph_module,
+        "create_document_verification_node",
+        mock_document_verification,
+    )
+
+    monkeypatch.setattr(
+        graph_module,
+        "create_fraud_detection_node",
+        mock_fraud_detection,
+    )
+
+    result = invoke_graph(
+        db,
+        "CLM_INT_HIGH_FRAUD",
+        "Analyze my claim.",
+    )
+
+    assert result["fraud_risk_score"] == 85
+    assert result["fraud_risk_level"] == "HIGH"
+
+    assert result["decision"] == "NEEDS_REVIEW"
+
+    assert "human investigation" in (
+        result["decision_reason"].lower()
+    )
+
+def test_medium_fraud_risk_integration(db, monkeypatch):
+    import app.graph.claim_agent_graph as graph_module
+
+    setup_claim_data(db, "CLM_INT_MEDIUM_FRAUD")
+
+    def mock_document_verification(db):
+        def node(state):
+            return {
+                "document_verification_status": "VERIFIED",
+                "document_verification_results": [],
+                "missing_documents": [],
+                "document_inconsistencies": [],
+                "document_recommendation": "Documents verified.",
+            }
+        return node
+
+    def mock_fraud_detection(db):
+        def node(state):
+            return {
+                "fraud_risk_score": 45,
+                "fraud_risk_level": "MEDIUM",
+                "fraud_findings": [],
+                "fraud_recommendation": (
+                    "Additional investigation required."
+                ),
+            }
+        return node
+
+    monkeypatch.setattr(
+        graph_module,
+        "create_document_verification_node",
+        mock_document_verification,
+    )
+
+    monkeypatch.setattr(
+        graph_module,
+        "create_fraud_detection_node",
+        mock_fraud_detection,
+    )
+
+    result = invoke_graph(
+        db,
+        "CLM_INT_MEDIUM_FRAUD",
+        "Analyze my claim.",
+    )
+
+    assert result["fraud_risk_score"] == 45
+    assert result["fraud_risk_level"] == "MEDIUM"
+    assert result["decision"] == "NEEDS_REVIEW"
+
+    assert "additional investigation" in (
+        result["decision_reason"].lower()
+    )
+
+def test_low_fraud_risk_integration(db, monkeypatch):
+    import app.graph.claim_agent_graph as graph_module
+
+    setup_claim_data(db, "CLM_INT_LOW_FRAUD")
+
+    def mock_document_verification(db):
+        def node(state):
+            return {
+                "document_verification_status": "VERIFIED",
+                "document_verification_results": [],
+                "missing_documents": [],
+                "document_inconsistencies": [],
+                "document_recommendation": "Documents verified.",
+            }
+        return node
+
+    def mock_fraud_detection(db):
+        def node(state):
+            return {
+                "fraud_risk_score": 10,
+                "fraud_risk_level": "LOW",
+                "fraud_findings": [],
+                "fraud_recommendation": "Normal processing.",
+            }
+        return node
+
+    monkeypatch.setattr(
+        graph_module,
+        "create_document_verification_node",
+        mock_document_verification,
+    )
+
+    monkeypatch.setattr(
+        graph_module,
+        "create_fraud_detection_node",
+        mock_fraud_detection,
+    )
+
+    result = invoke_graph(
+        db,
+        "CLM_INT_LOW_FRAUD",
+        "Analyze my claim.",
+    )
+
+    assert result["fraud_risk_score"] == 10
+    assert result["fraud_risk_level"] == "LOW"
+    assert result["decision"] == "ELIGIBLE_FOR_REVIEW"

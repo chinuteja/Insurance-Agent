@@ -4,10 +4,13 @@ from datetime import date
 from sqlalchemy.orm import Session
 
 from app.graph.claim_agent_state import ClaimAgentState
+from app.graph.agent_state_manager import record_agent_result
+
 from app.repositories.claim_repository import ClaimRepository
 from app.services.policy_service import PolicyService
 from app.services.document_service import DocumentService
 from app.services.fraud_detection_service import FraudDetectionService
+
 from app.document_processing.document_extraction_service import (
     DocumentExtractionService,
 )
@@ -24,11 +27,23 @@ def create_fraud_detection_node(db: Session):
 
     def fraud_detection_node(state: ClaimAgentState) -> dict:
 
+        def tracked_result(result: dict) -> dict:
+            tracking = record_agent_result(
+                state,
+                "fraud_detection",
+                result,
+            )
+
+            return {
+                **result,
+                **tracking,
+            }
+
         claim_data = state.get("claim")
 
         # 1. Verify claim exists
         if not claim_data:
-            return {
+            return tracked_result({
                 "fraud_risk_score": None,
                 "fraud_risk_level": None,
                 "fraud_findings": [],
@@ -36,7 +51,7 @@ def create_fraud_detection_node(db: Session):
                     "Fraud assessment could not be performed "
                     "because the claim was not found."
                 ),
-            }
+            })
 
         claim_id = state["claim_id"]
 
@@ -44,7 +59,7 @@ def create_fraud_detection_node(db: Session):
         policy = policy_service.get_policy(claim_data["policy_id"])
 
         if policy is None:
-            return {
+            return tracked_result({
                 "fraud_risk_score": None,
                 "fraud_risk_level": None,
                 "fraud_findings": [],
@@ -53,7 +68,7 @@ def create_fraud_detection_node(db: Session):
                     "because the policy record was not found. "
                     "Manual review is required."
                 ),
-            }
+            })
 
         # 3. Convert incident date
         incident_date = date.fromisoformat(
@@ -105,7 +120,7 @@ def create_fraud_detection_node(db: Session):
 
         # 7. Fail safely if any document extraction failed
         if extraction_errors:
-            return {
+            return tracked_result({
                 "fraud_risk_score": None,
                 "fraud_risk_level": None,
                 "fraud_findings": [],
@@ -116,7 +131,7 @@ def create_fraud_detection_node(db: Session):
                     "is required. "
                     + " | ".join(extraction_errors)
                 ),
-            }
+            })
 
         # 8. Run fraud detection
         result = fraud_detection_service.detect_fraud(
@@ -131,7 +146,7 @@ def create_fraud_detection_node(db: Session):
         )
 
         # 9. Return fraud assessment
-        return {
+        node_result = {
             "fraud_risk_score": result.risk_score,
             "fraud_risk_level": result.risk_level.value,
             "fraud_findings": [
@@ -140,5 +155,7 @@ def create_fraud_detection_node(db: Session):
             ],
             "fraud_recommendation": result.recommendation,
         }
+
+        return tracked_result(node_result)
 
     return fraud_detection_node

@@ -1,9 +1,13 @@
+
 from sqlalchemy.orm import Session
 
 from app.graph.claim_agent_state import ClaimAgentState
+from app.graph.agent_state_manager import record_agent_result
+
 from app.services.claim_service import ClaimService
 from app.services.policy_service import PolicyService
 from app.services.document_service import DocumentService
+
 from app.exceptions.business_exceptions import ClaimNotFoundException
 
 
@@ -21,7 +25,7 @@ def create_claim_data_node(db: Session):
             claim = claim_service.get_claim(claim_id)
 
         except ClaimNotFoundException:
-            return {
+            result = {
                 "claim": None,
                 "policy_active": False,
                 "covered": False,
@@ -30,6 +34,17 @@ def create_claim_data_node(db: Session):
                     f"I couldn't find claim {claim_id}. "
                     "Please verify the claim ID and try again."
                 ),
+            }
+
+            tracking = record_agent_result(
+                state,
+                "data",
+                result,
+            )
+
+            return {
+                **result,
+                **tracking,
             }
 
         policy_active = policy_service.is_policy_active(
@@ -57,11 +72,22 @@ def create_claim_data_node(db: Session):
             "status": claim.status,
         }
 
-        return {
+        result = {
             "claim": claim_data,
             "policy_active": policy_active,
             "covered": covered,
             "documents_present": documents_present,
+        }
+
+        tracking = record_agent_result(
+            state,
+            "data",
+            result,
+        )
+
+        return {
+            **result,
+            **tracking,
         }
 
     return claim_data_node
