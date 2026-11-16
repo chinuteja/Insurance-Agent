@@ -1,4 +1,3 @@
-
 from datetime import date
 
 from app.database.models import Customer, Policy, Claim, Document
@@ -20,10 +19,21 @@ def create_decision_state(
         "documents_present": None,
         "decision": None,
         "decision_reason": None,
+        "document_verification_status": "VERIFIED",
+        "document_verification_results": [],
+        "missing_documents": [],
+        "document_inconsistencies": [],
+        "document_recommendation": "",
         "fraud_risk_score": fraud_risk_score,
         "fraud_risk_level": fraud_risk_level,
         "fraud_findings": [],
         "fraud_recommendation": fraud_recommendation,
+        "completed_agents": [
+            "document_verification",
+            "fraud_detection",
+        ],
+        "agent_errors": [],
+        "requires_human_review": False,
     }
 
 
@@ -129,3 +139,46 @@ def test_missing_fraud_assessment_requires_review(db):
 
     assert result["decision"] == "NEEDS_REVIEW"
     assert "could not be completed" in result["decision_reason"]
+
+
+def test_agent_error_forces_manual_review(db):
+    decision_node = create_claim_decision_node(db)
+
+    state = create_decision_state()
+    state["agent_errors"] = [
+        {
+            "agent": "fraud_detection",
+            "error": "Fraud service unavailable.",
+        }
+    ]
+
+    result = decision_node(state)
+
+    assert result["decision"] == "NEEDS_REVIEW"
+    # print(result["decision_reason"])
+    assert "agents failed" in result["decision_reason"].lower()
+    assert "fraud_detection" in result["decision_reason"]
+
+
+def test_incomplete_agent_execution_forces_manual_review(db):
+    decision_node = create_claim_decision_node(db)
+
+    state = create_decision_state()
+    state["completed_agents"] = ["document_verification"]
+
+    result = decision_node(state)
+
+    assert result["decision"] == "NEEDS_REVIEW"
+    assert "fraud_detection" in result["decision_reason"]
+
+
+def test_human_review_flag_prevents_normal_validation(db):
+    decision_node = create_claim_decision_node(db)
+
+    state = create_decision_state()
+    state["requires_human_review"] = True
+
+    result = decision_node(state)
+
+    assert result["decision"] == "NEEDS_REVIEW"
+    assert "human review" in result["decision_reason"].lower()

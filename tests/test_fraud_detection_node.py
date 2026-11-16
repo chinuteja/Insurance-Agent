@@ -1,4 +1,3 @@
-
 from datetime import date
 from types import SimpleNamespace
 from unittest.mock import MagicMock
@@ -116,14 +115,20 @@ def test_extraction_failure_returns_no_risk_score(monkeypatch):
         result["fraud_recommendation"]
     )
 
-        # Failed assessment is recorded as an executed node
-    assert "fraud_detection" in result["completed_agents"]
+    # A failed assessment must not be marked as completed.
+    assert "fraud_detection" not in (
+        result.get("completed_agents") or []
+    )
 
-    assert result["agent_results"]["fraud_detection"][
-        "fraud_risk_score"
-    ] is None
+    # The failure must be recorded for supervisor handling.
+    assert any(
+        error["agent"] == "fraud_detection"
+        for error in result["agent_errors"]
+    )
 
+    assert result["requires_human_review"] is True
     assert result["current_agent"] is None
+
     fraud_service.detect_fraud.assert_not_called()
 
 
@@ -133,7 +138,7 @@ def test_successful_extraction_runs_fraud_detection(monkeypatch):
         _,
         _,
         _,
-        extraction_service,
+        _,
         fraud_service,
     ) = setup_node_dependencies(monkeypatch)
 
@@ -144,8 +149,14 @@ def test_successful_extraction_runs_fraud_detection(monkeypatch):
     assert result["fraud_findings"] == []
     assert result["fraud_recommendation"] == "Normal processing."
 
-        # Verify supervisor state tracking
+    # A successful assessment must be marked as completed.
     assert "fraud_detection" in result["completed_agents"]
+
+    # A successful assessment must not record an execution error.
+    assert not result.get("agent_errors")
+
+    # This successful low-risk assessment does not itself require review.
+    assert result.get("requires_human_review") is not True
 
     assert result["agent_results"]["fraud_detection"][
         "fraud_risk_score"
@@ -174,6 +185,15 @@ def test_missing_claim_stops_assessment(monkeypatch):
     assert result["fraud_risk_level"] is None
     assert "claim was not found" in result["fraud_recommendation"]
 
+    assert "fraud_detection" not in (
+        result.get("completed_agents") or []
+    )
+    assert result["requires_human_review"] is True
+    assert any(
+        error["agent"] == "fraud_detection"
+        for error in result["agent_errors"]
+    )
+
     fraud_service.detect_fraud.assert_not_called()
 
 
@@ -197,7 +217,17 @@ def test_missing_policy_stops_assessment(monkeypatch):
         result["fraud_recommendation"]
     )
 
+    assert "fraud_detection" not in (
+        result.get("completed_agents") or []
+    )
+    assert result["requires_human_review"] is True
+    assert any(
+        error["agent"] == "fraud_detection"
+        for error in result["agent_errors"]
+    )
+
     fraud_service.detect_fraud.assert_not_called()
+
 
 def test_duplicate_claim_is_forwarded_to_fraud_service(monkeypatch):
     (
@@ -220,17 +250,12 @@ def test_duplicate_claim_is_forwarded_to_fraud_service(monkeypatch):
 
     result = node(create_claim_state())
 
-    # Verify duplicate detection was performed
     claim_repository.find_duplicate_claim.assert_called_once()
-
-    # Verify duplicate information reached the fraud service
     fraud_service.detect_fraud.assert_called_once()
 
     call_arguments = fraud_service.detect_fraud.call_args.kwargs
 
     assert call_arguments["duplicate_found"] is True
-
-    # Verify the assessment was returned
     assert result["fraud_risk_score"] == 40
     assert result["fraud_risk_level"] == "MEDIUM"
 
@@ -262,10 +287,10 @@ def test_recent_policy_information_is_forwarded(monkeypatch):
 
     assert call_arguments["policy_start_date"] == date(2026, 1, 1)
     assert call_arguments["incident_date"] == date(2026, 1, 10)
-
     assert result["fraud_risk_score"] == 15
 
     fraud_service.detect_fraud.assert_called_once()
+
 
 def test_multiple_recent_claims_are_forwarded(monkeypatch):
     (
@@ -288,23 +313,19 @@ def test_multiple_recent_claims_are_forwarded(monkeypatch):
 
     result = node(create_claim_state())
 
-    # Verify recent claim count was retrieved
     claim_repository.count_recent_claims.assert_called_once()
 
-    # Verify count was forwarded to fraud detection
     call_arguments = fraud_service.detect_fraud.call_args.kwargs
-
     assert call_arguments["recent_claim_count"] == 4
 
-    # Verify the 90-day review window
     repository_arguments = (
         claim_repository.count_recent_claims.call_args.kwargs
     )
-
     assert repository_arguments["window_days"] == 90
 
     assert result["fraud_risk_score"] == 20
     fraud_service.detect_fraud.assert_called_once()
+
 
 def test_high_claim_amount_is_forwarded(monkeypatch):
     (
@@ -335,6 +356,7 @@ def test_high_claim_amount_is_forwarded(monkeypatch):
 
     fraud_service.detect_fraud.assert_called_once()
 
+
 def test_document_text_is_forwarded_to_fraud_service(monkeypatch):
     (
         node,
@@ -360,6 +382,7 @@ def test_document_text_is_forwarded_to_fraud_service(monkeypatch):
 
     assert suspicious_text in call_arguments["document_texts"]
     fraud_service.detect_fraud.assert_called_once()
+
 
 def test_ai_fraud_findings_are_returned_by_node(monkeypatch):
     (

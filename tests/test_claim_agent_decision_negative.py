@@ -56,10 +56,24 @@ def test_claim_decision_inactive_policy(db):
             "documents_present": None,
             "decision": None,
             "decision_reason": None,
+
             "fraud_risk_score": 10,
-"fraud_risk_level": "LOW",
-"fraud_findings": [],
-"fraud_recommendation": "Normal processing.",
+            "fraud_risk_level": "LOW",
+            "fraud_findings": [],
+            "fraud_recommendation": "Normal processing.",
+
+            "document_verification_status": "VERIFIED",
+            "document_verification_results": [],
+            "missing_documents": [],
+            "document_inconsistencies": [],
+            "document_recommendation": "",
+
+            "completed_agents": [
+                "document_verification",
+                "fraud_detection",
+            ],
+            "agent_errors": [],
+            "requires_human_review": False,
         }
     )
 

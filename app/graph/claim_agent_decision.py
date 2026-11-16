@@ -16,7 +16,7 @@ def create_claim_decision_node(db: Session):
         claim_id = state["claim_id"]
         service = ClaimService(db)
 
-        # Preserve missing claim errors.
+        # 1. Preserve missing claim errors.
         reason = state.get("decision_reason", "")
 
         if (
@@ -29,18 +29,78 @@ def create_claim_decision_node(db: Session):
                 "decision_reason": reason,
             }
 
-        # Check document verification first.
+        # 2. Check whether any agent execution failed.
+        agent_errors = state.get("agent_errors") or []
+
+        if agent_errors:
+            error_details = "; ".join(
+                f"{error.get('agent', 'Unknown agent')}: "
+                f"{error.get('error', 'Unknown error')}"
+                for error in agent_errors
+            )
+
+            return {
+                "decision": "NEEDS_REVIEW",
+                "decision_reason": (
+                    "One or more claim analysis agents failed. "
+                    "Automated assessment cannot be trusted. "
+                    "Manual review is required. "
+                    f"Errors: {error_details}"
+                ),
+            }
+
+        # 3. Respect the human-review safeguard.
+        if state.get("requires_human_review") is True:
+            return {
+                "decision": "NEEDS_REVIEW",
+                "decision_reason": (
+                    "The claim analysis workflow flagged this claim "
+                    "for human review. Automated processing cannot "
+                    "continue."
+                ),
+            }
+
+        # 4. Verify that both analysis agents completed successfully.
+        completed_agents = state.get("completed_agents") or []
+
+        required_agents = {
+            "document_verification",
+            "fraud_detection",
+        }
+
+        missing_agents = required_agents - set(completed_agents)
+
+        if missing_agents:
+            return {
+                "decision": "NEEDS_REVIEW",
+                "decision_reason": (
+                    "Required claim assessments were not completed: "
+                    f"{', '.join(sorted(missing_agents))}. "
+                    "Manual review is required."
+                ),
+            }
+
+        # 5. Check document verification status.
         document_status = state.get(
             "document_verification_status"
         )
 
-        missing_documents = state.get(
-            "missing_documents"
-        ) or []
+        missing_documents = (
+            state.get("missing_documents") or []
+        )
 
-        inconsistencies = state.get(
-            "document_inconsistencies"
-        ) or []
+        inconsistencies = (
+            state.get("document_inconsistencies") or []
+        )
+
+        if document_status is None:
+            return {
+                "decision": "NEEDS_REVIEW",
+                "decision_reason": (
+                    "Document verification status is unavailable. "
+                    "Manual document review is required."
+                ),
+            }
 
         if document_status == "INCOMPLETE":
             return {
@@ -70,7 +130,7 @@ def create_claim_decision_node(db: Session):
                 ),
             }
 
-        # Fraud risk assessment.
+        # 6. Validate fraud risk assessment.
         fraud_score = state.get("fraud_risk_score")
         fraud_level = state.get("fraud_risk_level")
 
@@ -78,7 +138,6 @@ def create_claim_decision_node(db: Session):
             state.get("fraud_recommendation") or ""
         )
 
-        # Do not proceed if fraud assessment is unavailable.
         if fraud_score is None or fraud_level is None:
             return {
                 "decision": "NEEDS_REVIEW",
@@ -88,7 +147,10 @@ def create_claim_decision_node(db: Session):
                 ),
             }
 
-        if not isinstance(fraud_score, int) or not 0 <= fraud_score <= 100:
+        if (
+            not isinstance(fraud_score, int)
+            or not 0 <= fraud_score <= 100
+        ):
             return {
                 "decision": "NEEDS_REVIEW",
                 "decision_reason": (
@@ -97,29 +159,31 @@ def create_claim_decision_node(db: Session):
                 ),
             }
 
-        # HIGH risk: escalate for human investigation.
+        # 7. HIGH risk: escalate for human investigation.
         if fraud_level == "HIGH":
             return {
                 "decision": "NEEDS_REVIEW",
                 "decision_reason": (
-                    f"High fraud risk detected (score: {fraud_score}/100). "
+                    f"High fraud risk detected "
+                    f"(score: {fraud_score}/100). "
                     "Escalate this claim for human investigation. "
                     f"{fraud_recommendation}"
                 ),
             }
 
-        # MEDIUM risk: additional investigation required.
+        # 8. MEDIUM risk: additional investigation required.
         if fraud_level == "MEDIUM":
             return {
                 "decision": "NEEDS_REVIEW",
                 "decision_reason": (
-                    f"Medium fraud risk detected (score: {fraud_score}/100). "
+                    f"Medium fraud risk detected "
+                    f"(score: {fraud_score}/100). "
                     "Additional investigation is required. "
                     f"{fraud_recommendation}"
                 ),
             }
 
-        # Only LOW risk proceeds to existing claim validation.
+        # 9. Only LOW risk proceeds to existing claim validation.
         if fraud_level != "LOW":
             return {
                 "decision": "NEEDS_REVIEW",
@@ -129,20 +193,23 @@ def create_claim_decision_node(db: Session):
                 ),
             }
 
-        # Existing claim validation.
+        # 10. Existing claim validation.
         try:
             is_valid = service.validate_claim(claim_id)
 
             if is_valid:
                 decision = "ELIGIBLE_FOR_REVIEW"
+
                 reason = (
                     "Claim validation passed. Policy is active, "
                     "incident is covered, and applicable document "
                     "requirements passed the current verification checks. "
                     f"Fraud risk is LOW ({fraud_score}/100)."
                 )
+
             else:
                 decision = "NEEDS_REVIEW"
+
                 reason = (
                     "Claim validation did not pass. "
                     "Further review of policy and coverage conditions "

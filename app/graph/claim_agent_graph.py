@@ -48,6 +48,14 @@ def route_next_supervisor_step(state: ClaimAgentState) -> str:
     Select the next uncompleted agent from the supervisor plan.
     """
 
+    # A failed agent must never be retried indefinitely.
+    # Route to decision, which enforces NEEDS_REVIEW.
+    if (
+        state.get("agent_errors")
+        or state.get("requires_human_review") is True
+    ):
+        return "decision"
+
     supervisor_plan = state.get("supervisor_plan") or []
     completed_agents = state.get("completed_agents") or []
 
@@ -60,7 +68,6 @@ def route_next_supervisor_step(state: ClaimAgentState) -> str:
             }:
                 return agent_name
 
-    # Fail-safe fallback
     return "decision"
 
 
